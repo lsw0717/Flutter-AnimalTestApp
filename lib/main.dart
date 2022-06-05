@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tflite/tflite.dart';
+import './result.dart' as result;
+import 'package:provider/provider.dart';
+import './provider.dart' as provider;
 
 void main() {
   runApp(const MyApp());
@@ -14,13 +17,18 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Flutter Tensorflow app',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (c) => provider.Store1()),
+      ],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Flutter Tensorflow app',
+        theme: ThemeData(
+          primarySwatch: Colors.green,
+        ),
+        home: AnimalApp(),
       ),
-      home: AnimalApp(),
     );
   }
 }
@@ -33,9 +41,7 @@ class AnimalApp extends StatefulWidget {
 }
 
 class _AnimalAppState extends State<AnimalApp> {
-  File? _image;
   final picker = ImagePicker();
-  List? _outputs;
 
   // 앱이 실행될 때 loadModel() 함수를 호출
   @override
@@ -62,25 +68,26 @@ class _AnimalAppState extends State<AnimalApp> {
   Future getImage(ImageSource imageSource) async {
     final image = await picker.pickImage(source: imageSource);
 
-    setState(() {
-      _image = File(image!.path); // 가져온 이미지를 _image에 저장
-    });
-    await classifyImage(File(image!.path)); // 가져온 이미지를 분류 하기 위해 await을 사용
+    context.read<provider.Store1>().changeImage(File(image!.path));
+
+    await classifyImage(File(image.path)); // 가져온 이미지를 분류 하기 위해 await을 사용
   }
 
   // 이미지 분류
   Future classifyImage(File image) async {
     var output = await Tflite.runModelOnImage(
         path: image.path,
-        imageMean: 0.0, // defaults to 117.0
-        imageStd: 255.0, // defaults to 1.0
-        numResults: 2, // defaults to 5
-        threshold: 0.2, // defaults to 0.1
+        imageMean: 0.0,
+        // defaults to 117.0
+        imageStd: 255.0,
+        // defaults to 1.0
+        numResults: 2,
+        // defaults to 5
+        threshold: 0.2,
+        // defaults to 0.1
         asynch: true // defaults to true
         );
-    setState(() {
-      _outputs = output;
-    });
+    context.read<provider.Store1>().changeOutputs(output);
   }
 
   // 이미지를 보여주는 위젯
@@ -90,48 +97,20 @@ class _AnimalAppState extends State<AnimalApp> {
         width: MediaQuery.of(context).size.width,
         height: MediaQuery.of(context).size.width,
         child: Center(
-            child: _image == null
+            child: context.watch<provider.Store1>().image == null
                 ? Text('No image selected.')
-                : Image.file(File(_image!.path))));
+                : Image.file(
+                    File(context.watch<provider.Store1>().image!.path))));
   }
 
-  recycleDialog() {
-    _outputs != null
-        ? showDialog(
-            context: context,
-            barrierDismissible:
-                false, // barrierDismissible - Dialog를 제외한 다른 화면 터치 x
-            builder: (BuildContext context) {
-              return AlertDialog(
-                // RoundedRectangleBorder - Dialog 화면 모서리 둥글게 조절
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.0)),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      _outputs![0]['label'].toString().toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 15.0,
-                        background: Paint()..color = Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                actions: <Widget>[
-                  Center(
-                    child: ElevatedButton(
-                      child: Text("Ok"),
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                    ),
-                  )
-                ],
-              );
-            })
+  //dialog 삭제
+  //결과 페이지로 이동하는 함수
+  goToResultPage() {
+    context.read<provider.Store1>().outputs != null
+        ? Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => result.ResultPage()),
+          )
         : showDialog(
             context: context,
             barrierDismissible: false,
@@ -193,7 +172,8 @@ class _AnimalAppState extends State<AnimalApp> {
                   tooltip: 'pick Iamge',
                   onPressed: () async {
                     await getImage(ImageSource.camera);
-                    recycleDialog();
+                    //recycleDialog();
+                    goToResultPage();
                   },
                 ),
 
@@ -203,7 +183,8 @@ class _AnimalAppState extends State<AnimalApp> {
                   tooltip: 'pick Iamge',
                   onPressed: () async {
                     await getImage(ImageSource.gallery);
-                    recycleDialog();
+                    //recycleDialog();
+                    goToResultPage();
                   },
                 ),
               ],
